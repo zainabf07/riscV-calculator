@@ -1,12 +1,9 @@
-# 🖥️ RISC-V Calculator
+# RISC-V Calculator
 
 A calculator implemented in **RISC-V assembly (RV32IM)** with a matching retro-terminal **HTML/CSS/JS frontend** that visualizes each operation as real RISC-V instructions.
 
-![RISC-V Calculator Preview](docs/preview.png)
 
----
-
-## 📁 Project Structure
+## Project Structure
 
 ```
 riscv-calculator/
@@ -56,7 +53,7 @@ spike --isa=RV32IM pk calculator
 
 ---
 
-## 🌐 Running the Frontend
+## Running the Frontend
 
 Just open `src/calculator.html` in any modern browser — no server needed.
 
@@ -66,7 +63,7 @@ Just open `src/calculator.html` in any modern browser — no server needed.
 
 ---
 
-## 📖 ISA Reference
+## ISA Reference
 
 | Operation | Instruction | Cycles |
 |---|---|---|
@@ -80,12 +77,12 @@ Registers used: `t0–t3` (temporaries), `s0` (saved result), `a0/a7` (syscall a
 
 ---
 
-## 👤 Author
+## Author
 
-Made with ❤️ — RISC-V Assembly Project
+Zainab Fatima — RISC-V Assembly Project
 
 ---
 
-## 📄 License
+## License
 
 MIT License — see [LICENSE](LICENSE)
