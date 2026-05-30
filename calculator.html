@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RISC-V Calculator</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #0a0e0a;
+    --surface:  #111611;
+    --panel:    #161d16;
+    --border:   #1f2e1f;
+    --green:    #39ff5a;
+    --green-dim:#1a7a2e;
+    --green-mid:#22c43c;
+    --amber:    #f5a623;
+    --red:      #ff4444;
+    --text:     #c8e6c9;
+    --muted:    #4a6b4a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(57,255,90,0.012) 2px, rgba(57,255,90,0.012) 4px);
+  }
+
+  /* scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent 0px,
+      transparent 3px,
+      rgba(0,0,0,0.18) 3px,
+      rgba(0,0,0,0.18) 4px
+    );
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  .wrapper {
+    display: grid;
+    grid-template-columns: 340px 360px;
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--green-dim);
+    box-shadow: 0 0 40px rgba(57,255,90,0.1), 0 0 80px rgba(57,255,90,0.04);
+    animation: flicker 8s infinite;
+  }
+
+  @keyframes flicker {
+    0%,100%   { box-shadow: 0 0 40px rgba(57,255,90,0.1), 0 0 80px rgba(57,255,90,0.04); }
+    93%       { box-shadow: 0 0 40px rgba(57,255,90,0.1), 0 0 80px rgba(57,255,90,0.04); }
+    93.5%     { box-shadow: 0 0 20px rgba(57,255,90,0.05); opacity: 0.92; }
+    94%       { box-shadow: 0 0 40px rgba(57,255,90,0.1), 0 0 80px rgba(57,255,90,0.04); }
+  }
+
+  /* ── LEFT PANEL ── */
+  .calc-panel {
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .title-bar {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 18px;
+    text-align: center;
+  }
+
+  .title-bar h1 {
+    font-family: 'VT323', monospace;
+    font-size: 22px;
+    color: var(--green);
+    letter-spacing: 0.2em;
+    text-shadow: 0 0 12px rgba(57,255,90,0.6);
+    line-height: 1.3;
+  }
+
+  .title-bar p {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.12em;
+    margin-top: 2px;
+  }
+
+  /* display */
+  .display {
+    background: #060a06;
+    margin: 16px;
+    border: 1px solid var(--green-dim);
+    padding: 14px 16px;
+    border-radius: 2px;
+    min-height: 110px;
+    position: relative;
+  }
+
+  .display-expr {
+    font-size: 12px;
+    color: var(--muted);
+    min-height: 18px;
+    letter-spacing: 0.06em;
+  }
+
+  .display-result {
+    font-family: 'VT323', monospace;
+    font-size: 52px;
+    color: var(--green);
+    text-shadow: 0 0 16px rgba(57,255,90,0.5);
+    line-height: 1.1;
+    word-break: break-all;
+    transition: color 0.2s;
+  }
+
+  .display-result.error { color: var(--red); text-shadow: 0 0 16px rgba(255,68,68,0.5); }
+
+  .display-prev {
+    font-size: 11px;
+    color: var(--amber);
+    margin-top: 6px;
+    min-height: 16px;
+    letter-spacing: 0.06em;
+  }
+
+  .cursor {
+    display: inline-block;
+    width: 10px;
+    height: 3px;
+    background: var(--green);
+    vertical-align: middle;
+    margin-left: 2px;
+    animation: blink 1s step-end infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* register row */
+  .regs {
+    display: flex;
+    gap: 6px;
+    padding: 0 16px 12px;
+  }
+  .reg {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 5px 8px;
+    font-size: 11px;
+  }
+  .reg-label { color: var(--muted); letter-spacing: 0.08em; }
+  .reg-val { color: var(--green); font-size: 13px; font-weight: bold; }
+
+  /* op menu */
+  .menu-label {
+    padding: 0 16px 6px;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.12em;
+  }
+
+  .op-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--border);
+    margin: 0 16px;
+  }
+
+  .op-btn {
+    background: var(--panel);
+    border: none;
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    padding: 13px 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.12s, color 0.12s;
+    letter-spacing: 0.04em;
+  }
+
+  .op-btn:hover { background: #1a2e1a; color: var(--green); }
+  .op-btn:active { background: var(--green-dim); }
+  .op-btn.active { background: var(--green-dim); color: var(--green); }
+
+  .op-key {
+    width: 22px; height: 22px;
+    background: var(--border);
+    border-radius: 2px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  .op-sym {
+    margin-left: auto;
+    color: var(--amber);
+    font-size: 16px;
+  }
+
+  .exit-btn {
+    background: var(--panel);
+    border: none;
+    border-top: 1px solid var(--border);
+    color: var(--red);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    width: calc(100% - 32px);
+    margin: 1px 16px 0;
+    padding: 11px;
+    cursor: pointer;
+    letter-spacing: 0.12em;
+    transition: background 0.12s;
+  }
+  .exit-btn:hover { background: #1a0a0a; }
+
+  /* input modal */
+  .input-section {
+    margin: 12px 16px 0;
+    border: 1px solid var(--green-dim);
+    background: #060a06;
+    padding: 12px 14px;
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .input-section.visible { display: flex; }
+
+  .input-section label {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  .input-section input[type="number"] {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--green-dim);
+    color: var(--green);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 20px;
+    padding: 8px 10px;
+    outline: none;
+    border-radius: 0;
+  }
+  .input-section input[type="number"]:focus { border-color: var(--green); box-shadow: 0 0 8px rgba(57,255,90,0.2); }
+
+  .reuse-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .reuse-row label { margin: 0; font-size: 12px; color: var(--amber); }
+  .toggle {
+    position: relative;
+    width: 38px; height: 20px;
+    cursor: pointer;
+  }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-track {
+    position: absolute; inset: 0;
+    background: var(--border);
+    border: 1px solid var(--green-dim);
+    border-radius: 2px;
+    transition: background 0.2s;
+  }
+  .toggle input:checked + .toggle-track { background: var(--green-dim); }
+  .toggle-thumb {
+    position: absolute;
+    top: 3px; left: 3px;
+    width: 12px; height: 12px;
+    background: var(--muted);
+    border-radius: 1px;
+    transition: left 0.2s, background 0.2s;
+  }
+  .toggle input:checked ~ .toggle-thumb { left: 21px; background: var(--green); }
+
+  .calc-btn {
+    background: var(--green-dim);
+    border: 1px solid var(--green);
+    color: var(--green);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 14px;
+    padding: 10px;
+    cursor: pointer;
+    letter-spacing: 0.1em;
+    transition: background 0.12s;
+    text-shadow: 0 0 6px rgba(57,255,90,0.4);
+  }
+  .calc-btn:hover { background: #1f5c2a; }
+
+  /* ── RIGHT PANEL: ASM LOG ── */
+  .asm-panel {
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .asm-header {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .asm-header h2 {
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    color: var(--amber);
+    letter-spacing: 0.15em;
+  }
+
+  .asm-header span {
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .asm-log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 16px;
+    font-size: 12px;
+    line-height: 1.8;
+    scrollbar-width: thin;
+    scrollbar-color: var(--green-dim) transparent;
+    max-height: 500px;
+  }
+
+  .asm-log::-webkit-scrollbar { width: 4px; }
+  .asm-log::-webkit-scrollbar-thumb { background: var(--green-dim); }
+
+  .asm-entry { margin-bottom: 14px; animation: fadeIn 0.3s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  .asm-entry .op-tag {
+    font-size: 10px;
+    color: var(--amber);
+    letter-spacing: 0.12em;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .asm-entry .op-tag::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .asm-line { color: var(--muted); }
+  .asm-line .instr { color: var(--green); }
+  .asm-line .reg  { color: #7ecfff; }
+  .asm-line .imm  { color: var(--amber); }
+  .asm-line .comment { color: #3a5a3a; }
+  .asm-line .result-line { color: var(--green); font-weight: bold; text-shadow: 0 0 6px rgba(57,255,90,0.3); }
+
+  .asm-empty {
+    color: var(--muted);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    padding: 20px 0;
+  }
+
+  .stats-bar {
+    border-top: 1px solid var(--border);
+    padding: 10px 16px;
+    display: flex;
+    gap: 16px;
+    font-size: 11px;
+    background: var(--panel);
+  }
+  .stat { color: var(--muted); }
+  .stat span { color: var(--green); }
+
+  /* clear log btn */
+  .clear-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    padding: 4px 10px;
+    cursor: pointer;
+    letter-spacing: 0.08em;
+    transition: color 0.12s;
+  }
+  .clear-btn:hover { color: var(--red); border-color: var(--red); }
+
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    display: inline-block;
+    margin-right: 6px;
+    box-shadow: 0 0 6px var(--green);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 50% { opacity: 0.4; } }
+
+  /* reset banner */
+  .reset-banner {
+    display: none;
+    margin: 10px 16px 0;
+    background: #0a0606;
+    border: 1px solid var(--red);
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--red);
+    letter-spacing: 0.06em;
+    animation: fadeIn 0.2s;
+  }
+  .reset-banner.visible { display: block; }
+</style>
+</head>
+<body>
+
+<div class="wrapper">
+
+  <!-- ══ LEFT: CALCULATOR ══ -->
+  <div class="calc-panel">
+    <div class="title-bar">
+      <h1>★ RISC-V CALCULATOR ★</h1>
+      <p>RV32IM ISA &nbsp;|&nbsp; MARS/SPIKE COMPATIBLE</p>
+    </div>
+
+    <div class="display">
+      <div class="display-expr" id="expr">&nbsp;</div>
+      <div class="display-result" id="result">0<span class="cursor"></span></div>
+      <div class="display-prev" id="prevResult">&nbsp;</div>
+    </div>
+
+    <div class="regs">
+      <div class="reg"><div class="reg-label">t0</div><div class="reg-val" id="r-t0">0x00000000</div></div>
+      <div class="reg"><div class="reg-label">t1</div><div class="reg-val" id="r-t1">0x00000000</div></div>
+      <div class="reg"><div class="reg-label">t3</div><div class="reg-val" id="r-t3">0x00000000</div></div>
+    </div>
+
+    <div class="menu-label">// SELECT OPERATION</div>
+    <div class="op-grid">
+      <button class="op-btn" onclick="selectOp(1)"><span class="op-key">1</span>ADD<span class="op-sym">+</span></button>
+      <button class="op-btn" onclick="selectOp(2)"><span class="op-key">2</span>SUBTRACT<span class="op-sym">−</span></button>
+      <button class="op-btn" onclick="selectOp(3)"><span class="op-key">3</span>MULTIPLY<span class="op-sym">×</span></button>
+      <button class="op-btn" onclick="selectOp(4)"><span class="op-key">4</span>DIVIDE<span class="op-sym">÷</span></button>
+      <button class="op-btn" onclick="selectOp(5)"><span class="op-key">5</span>MODULUS<span class="op-sym">%</span></button>
+      <button class="op-btn" onclick="resetCalc()"><span class="op-key">AC</span>CLEAR<span class="op-sym">⌫</span></button>
+    </div>
+    <button class="exit-btn" onclick="exitCalc()">[ 6 ] EXIT — TERMINATE PROCESS</button>
+
+    <!-- Input form -->
+    <div class="input-section" id="inputSection">
+      <div class="reuse-row">
+        <label for="reuseToggle">USE PREVIOUS RESULT (s0):</label>
+        <label class="toggle">
+          <input type="checkbox" id="reuseToggle" onchange="toggleReuse()">
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+      </div>
+      <div id="firstInputGroup">
+        <label for="num1">ENTER FIRST NUMBER:</label>
+        <input type="number" id="num1" placeholder="0" step="any">
+      </div>
+      <div>
+        <label for="num2">ENTER SECOND NUMBER:</label>
+        <input type="number" id="num2" placeholder="0" step="any">
+      </div>
+      <button class="calc-btn" onclick="compute()">▶ EXECUTE INSTRUCTION</button>
+    </div>
+
+    <div class="reset-banner" id="resetBanner">PROCESS TERMINATED — REGISTERS CLEARED</div>
+  </div>
+
+  <!-- ══ RIGHT: ASM LOG ══ -->
+  <div class="asm-panel">
+    <div class="asm-header">
+      <h2>ASM TRACE LOG</h2>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="clear-btn" onclick="clearLog()">CLEAR</button>
+        <span><span class="status-dot"></span>LIVE</span>
+      </div>
+    </div>
+
+    <div class="asm-log" id="asmLog">
+      <div class="asm-empty" id="emptyMsg">
+        # Waiting for operations...<br>
+        # Select an operation to begin.
+      </div>
+    </div>
+
+    <div class="stats-bar">
+      <div class="stat">OPS: <span id="opsCount">0</span></div>
+      <div class="stat">CYCLES: <span id="cycleCount">0</span></div>
+      <div class="stat">s0 (SAVED): <span id="s0Val">0</span></div>
+      <div class="stat">PC: <span id="pcVal">0x00400000</span></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const state = {
+  s0: 0, cycles: 0, ops: 0,
+  pc: 0x00400000, selectedOp: null
+};
+const CYCLES = { add:1, sub:1, mul:4, div:20, rem:20 };
+const OP_NAMES = { 1:'ADD', 2:'SUB', 3:'MUL', 4:'DIV', 5:'MOD' };
+const OP_SYMS  = { 1:'+', 2:'-', 3:'*', 4:'/', 5:'%' };
+
+function hex(n) {
+  return '0x' + (n >>> 0).toString(16).toUpperCase().padStart(8,'0');
+}
+
+function selectOp(n) {
+  state.selectedOp = n;
+  document.querySelectorAll('.op-btn').forEach((b,i) => b.classList.toggle('active', i === n-1));
+  document.getElementById('inputSection').classList.add('visible');
+  document.getElementById('resetBanner').classList.remove('visible');
+  document.getElementById('reuseToggle').checked = false;
+  toggleReuse();
+  document.getElementById('num1').focus();
+}
+
+function toggleReuse() {
+  const on = document.getElementById('reuseToggle').checked;
+  document.getElementById('firstInputGroup').style.opacity = on ? '0.35' : '1';
+  document.getElementById('firstInputGroup').style.pointerEvents = on ? 'none' : 'auto';
+}
+
+function compute() {
+  const op = state.selectedOp;
+  if (!op) return;
+
+  const reuse = document.getElementById('reuseToggle').checked;
+  const a = reuse ? state.s0 : parseFloat(document.getElementById('num1').value || 0);
+  const b = parseFloat(document.getElementById('num2').value || 0);
+  const t1 = a, t2 = b;
+
+  // division by zero
+  if ((op === 4 || op === 5) && b === 0) {
+    showError('DIV BY ZERO', a, b, op);
+    return;
+  }
+
+  let t3, instrName;
+  if      (op===1) { t3=a+b; instrName='add';  state.cycles += CYCLES.add; }
+  else if (op===2) { t3=a-b; instrName='sub';  state.cycles += CYCLES.sub; }
+  else if (op===3) { t3=a*b; instrName='mul';  state.cycles += CYCLES.mul; }
+  else if (op===4) { t3=Math.trunc(a/b); instrName='div'; state.cycles += CYCLES.div; }
+  else if (op===5) { t3=((a%b)+b)%b; if(a<0&&t3!==0) t3-=b; t3=Math.trunc(a%b); instrName='rem'; state.cycles += CYCLES.rem; }
+
+  const result = parseFloat(t3.toFixed(10));
+  state.s0 = result;
+  state.ops++;
+  state.pc += 4 * 5;
+
+  // update display
+  const sym = OP_SYMS[op];
+  document.getElementById('expr').textContent = `${a} ${sym} ${b} =`;
+  const rd = document.getElementById('result');
+  rd.innerHTML = result + '<span class="cursor"></span>';
+  rd.className = 'display-result';
+  document.getElementById('prevResult').textContent = `s0 ← ${result}  (saved result)`;
+
+  // regs
+  document.getElementById('r-t0').textContent = hex(Math.trunc(a));
+  document.getElementById('r-t1').textContent = hex(Math.trunc(b));
+  document.getElementById('r-t3').textContent = hex(Math.trunc(result));
+
+  // stats
+  document.getElementById('opsCount').textContent   = state.ops;
+  document.getElementById('cycleCount').textContent = state.cycles;
+  document.getElementById('s0Val').textContent      = result;
+  document.getElementById('pcVal').textContent      = hex(state.pc);
+
+  // emit asm
+  const reuseNote = reuse ? `  <span class="comment"># s0 = ${a} (prev result)</span>` : '';
+  const lines = [
+    `<span class="comment"># get_inputs / load operands</span>`,
+    reuse
+      ? `  <span class="instr">mv</span>  <span class="reg">t1</span>, <span class="reg">s0</span>${reuseNote}`
+      : `  <span class="instr">li</span>  <span class="reg">t1</span>, <span class="imm">${a}</span>`,
+    `  <span class="instr">li</span>  <span class="reg">t2</span>, <span class="imm">${b}</span>`,
+    `<span class="comment"># execute operation</span>`,
+    `  <span class="instr">${instrName}</span> <span class="reg">t3</span>, <span class="reg">t1</span>, <span class="reg">t2</span>`,
+    `<span class="comment"># print_result</span>`,
+    `  <span class="instr">mv</span>  <span class="reg">a0</span>, <span class="reg">t3</span>`,
+    `  <span class="instr">li</span>  <span class="reg">a7</span>, <span class="imm">1</span>`,
+    `  <span class="instr">ecall</span>                    <span class="comment"># print int</span>`,
+    `  <span class="instr">mv</span>  <span class="reg">s0</span>, <span class="reg">t3</span>   <span class="comment"># save result</span>`,
+    `  <span class="result-line"># → Result: ${result}</span>`,
+  ];
+  appendLog(OP_NAMES[op], lines);
+}
+
+function showError(label, a, b, op) {
+  const rd = document.getElementById('result');
+  rd.innerHTML = 'ERR<span class="cursor"></span>';
+  rd.className = 'display-result error';
+  document.getElementById('expr').textContent = `${a} ${OP_SYMS[op]} ${b} = ???`;
+
+  const lines = [
+    `  <span class="instr">li</span>  <span class="reg">t1</span>, <span class="imm">${a}</span>`,
+    `  <span class="instr">li</span>  <span class="reg">t2</span>, <span class="imm">${b}</span>`,
+    `<span class="comment"># division by zero check</span>`,
+    `  <span class="instr">beq</span> <span class="reg">t2</span>, <span class="reg">zero</span>, div_error`,
+    `<span style="color:var(--red)">div_error:</span>`,
+    `  <span class="instr">li</span>  <span class="reg">a7</span>, <span class="imm">4</span>`,
+    `  <span class="instr">la</span>  <span class="reg">a0</span>, zeroErr`,
+    `  <span class="instr">ecall</span>                    <span class="comment"># "Division by zero!"</span>`,
+    `  <span class="instr">j</span>   loop`,
+    `<span style="color:var(--red)">  # ✗ ILLEGAL: DIVISION BY ZERO</span>`,
+  ];
+  appendLog('DIV_ERROR', lines);
+}
+
+function appendLog(opLabel, lines) {
+  document.getElementById('emptyMsg')?.remove();
+  const log = document.getElementById('asmLog');
+  const entry = document.createElement('div');
+  entry.className = 'asm-entry';
+  entry.innerHTML = `<div class="op-tag">${opLabel} &nbsp; op #${state.ops}</div>` +
+    lines.map(l => `<div class="asm-line">${l}</div>`).join('');
+  log.appendChild(entry);
+  log.scrollTop = log.scrollHeight;
+}
+
+function clearLog() {
+  const log = document.getElementById('asmLog');
+  log.innerHTML = '<div class="asm-empty" id="emptyMsg"># Log cleared.<br># Select an operation to begin.</div>';
+}
+
+function resetCalc() {
+  state.s0=0; state.cycles=0; state.ops=0; state.pc=0x00400000; state.selectedOp=null;
+  document.getElementById('result').innerHTML = '0<span class="cursor"></span>';
+  document.getElementById('result').className = 'display-result';
+  document.getElementById('expr').textContent = '';
+  document.getElementById('prevResult').textContent = '';
+  document.getElementById('r-t0').textContent = hex(0);
+  document.getElementById('r-t1').textContent = hex(0);
+  document.getElementById('r-t3').textContent = hex(0);
+  document.getElementById('opsCount').textContent = 0;
+  document.getElementById('cycleCount').textContent = 0;
+  document.getElementById('s0Val').textContent = 0;
+  document.getElementById('pcVal').textContent = hex(0x00400000);
+  document.getElementById('inputSection').classList.remove('visible');
+  document.querySelectorAll('.op-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('resetBanner').classList.add('visible');
+  document.getElementById('num1').value = '';
+  document.getElementById('num2').value = '';
+}
+
+function exitCalc() {
+  const log = document.getElementById('asmLog');
+  document.getElementById('emptyMsg')?.remove();
+  const entry = document.createElement('div');
+  entry.className = 'asm-entry';
+  entry.innerHTML = `<div class="op-tag">EXIT &nbsp; syscall 10</div>
+    <div class="asm-line"><span class="comment"># exit label</span></div>
+    <div class="asm-line">  <span class="instr">li</span>  <span class="reg">a7</span>, <span class="imm">10</span></div>
+    <div class="asm-line">  <span class="instr">ecall</span>                    <span class="comment"># terminate</span></div>
+    <div class="asm-line" style="color:var(--red)">  # ✓ PROCESS EXITED — code 0</div>`;
+  log.appendChild(entry);
+  log.scrollTop = log.scrollHeight;
+  resetCalc();
+  document.getElementById('resetBanner').textContent = 'PROCESS EXITED — li a7, 10 → ecall';
+  document.getElementById('resetBanner').classList.add('visible');
+}
+
+// keyboard shortcut: 1-5 to select op, Enter to compute
+document.addEventListener('keydown', e => {
+  if (e.key >= '1' && e.key <= '5') selectOp(parseInt(e.key));
+  if (e.key === 'Enter') compute();
+  if (e.key === 'Escape') resetCalc();
+});
+</script>
+</body>
+</html>
